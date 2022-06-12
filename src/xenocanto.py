@@ -62,6 +62,5 @@ def download_recordings(recordings_list:dict, output_dir:typing.Union[str, Path]
       file_path = Path(output_dir) / file_name
       if not file_path.is_file():
         wget.download(url, str(file_path))
-      
-      # sleep to avoid xeno-canto API overload
-      time.sleep(wait)
+        # sleep to avoid xeno-canto API overload
+        time.sleep(wait)
