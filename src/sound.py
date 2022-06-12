@@ -17,11 +17,13 @@ def _get_file_path(input_file_path:Path, suffix:str, output_dir:Path = None, for
     return output_file_path
 
 def split_into_non_silent(input_file_path:Path, output_dir:Path = None, 
-  threshold:list = [.5, 1.], format = 'WAV', force = False):
+  threshold:list = [.5, 1.], format = 'WAV', force = False) -> Path:
+
   # load audio file and split into non-silent intervals
   waveform, sample_rate = lr.load(path = input_file_path)
   intervals = lr.effects.split(y = waveform)
 
+  output_file_paths = []
   for i, intr in enumerate(intervals):
     # skip intervals w/ duration outside of threshold[] limits
     duration = lr.get_duration(y = waveform[intr[0]:intr[1]], sr = sample_rate)
@@ -29,16 +31,25 @@ def split_into_non_silent(input_file_path:Path, output_dir:Path = None,
       continue
 
     output_file_path = _get_file_path(input_file_path, f'{i}', output_dir, format)
+    output_file_paths.append(output_file_path)
+
     if (not output_file_path.is_file()) or force:
       sf.write(output_file_path, waveform[intr[0]:intr[1]], sample_rate, format = format)
 
-def reduce_background_noise(input_file_path:Path, output_dir:Path = None, format = 'WAV', force = False):
+  return output_file_paths
+
+def reduce_background_noise(input_file_path:Path, output_dir:Path = None, 
+  suffix:str = 'noisered', format = 'WAV', force = False) -> Path:
+  
   # output file name format : add '_noisered' suffix to input_filename
-  output_file_path = _get_file_path(input_file_path, 'noisered', output_dir, format)
+  output_file_path = _get_file_path(input_file_path, suffix, output_dir, format)
   
   # skip noise removal if file already exists or if force = False
   if (not output_file_path.is_file()) or force:
     # apply non-stationary noise reduction to audio file (https://pypi.org/project/noisereduce/)
     waveform, sample_rate = lr.load(input_file_path)
     waveform_reduced = nr.reduce_noise(y = waveform, sr = sample_rate)
+
     sf.write(output_file_path, waveform_reduced, sample_rate, format = format)
+  
+  return output_file_path
