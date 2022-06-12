@@ -17,11 +17,11 @@ def get_recordings_list(genus:str, subspecies:str) -> dict:
   response = requests.get(url, verify = True)
   
   try:
-    records_list = response.json()
-  except requests.exceptions.JSONDecodeError:
-    records_list = {}
+    recordings_list = response.json()['recordings']
+  except (requests.exceptions.JSONDecodeError, KeyError):
+    recordings_list = []
 
-  return records_list
+  return recordings_list
 
 def get_recording_filename(recording:dict) -> str:
     try:
@@ -39,17 +39,14 @@ def get_recording_filename(recording:dict) -> str:
     
     return file_name.lower()
 
-def download_recordings(recordings_list:dict, output_dir:typing.Union[str, Path], 
+def download_recordings(recordings_list:list, output_dir:typing.Union[str, Path], 
   max_records:int = 0, wait:int = 1):
-
-  if 'recordings' not in recordings_list:
-    raise KeyError("no audio recordings on records list ('recordings' key is missing)")
 
   if wait < 1:
     raise ValueError(f"wait < 1 seconds not allowed : would overload {XENO_CANTO_NAME} API")
 
-  max_records = max_records if max_records > 0 else len(recordings_list['recordings'])
-  for i, rec in enumerate(recordings_list['recordings'][:max_records]):
+  max_records = max_records if max_records > 0 else len(recordings_list)
+  for i, rec in enumerate(recordings_list[:max_records]):
     try:
       # url to download the audio file
       url = rec['file']
