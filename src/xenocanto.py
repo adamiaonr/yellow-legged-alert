@@ -1,63 +1,102 @@
+import json
 import time
 import wget
-import typing
 import requests
 
 from pathlib import Path
 from urllib.parse import quote
+from dataclasses import dataclass
+from collections import defaultdict
+from typing import Union, Tuple
 
 XENO_CANTO_NAME = "xeno-canto"
 XENO_CANTO_API_ENDPOINT = "https://www.xeno-canto.org/api/2"
 
-def get_recordings_list(genus:str, subspecies:str) -> dict:
-  # sanitize query (contains spaces)
-  query = quote(f'query=ssp:"{subspecies}" gen:"{genus}"', safe = '=:')
-  url = f"{XENO_CANTO_API_ENDPOINT}/recordings?{query}"
-  
-  response = requests.get(url, verify = True)
-  
-  try:
-    recordings_list = response.json()['recordings']
-  except (requests.exceptions.JSONDecodeError, KeyError):
-    recordings_list = []
+@dataclass
+class Recording:
+  id: str
+  genus: str
+  species: str
+  subspecies: str
+  url: str
+  audio_type: str
+  filename: str = ''
 
-  return recordings_list
+  def _generate_filename(self) -> str:
+    return "{genus}_{species}_{subspecies}_{id}.{ext}".format(
+        genus       = self.genus,
+        species     = self.species, 
+        subspecies  = self.subspecies,
+        id          = self.id,
+        ext         = self.audio_type
+      ).lower()
 
-def get_recording_filename(recording:dict) -> str:
+  @classmethod
+  def from_dict(cls, data:dict) -> "Recording":
     try:
-      # audio files saved w/ format {genus}_{species}_{subspecies}_{id}.{ext}
-      # in this case, {ext} shall be an audio format (e.g., 'mp3', 'wav')
-      file_name = "{genus}_{species}_{subspecies}_{id}{ext}".format(
-        genus       = recording['gen'],
-        species     = recording['sp'], 
-        subspecies  = recording['ssp'],
-        id          = recording['id'],
-        ext         = Path(recording['file-name']).suffix
+      rec = Recording(
+        id =          data['id'],
+        genus =       data['gen'].lower(),
+        species =     data['sp'].lower(),
+        subspecies =  data['ssp'].lower(),
+        url  =        data['file'],
+        audio_type =  Path(data['file-name']).suffix.strip('.').lower()
       )
     except KeyError:
       raise KeyError("error while generating filename for recording")
-    
-    return file_name.lower()
+    else:
+      rec.filename = rec._generate_filename()
 
-def download_recordings(recordings_list:list, output_dir:typing.Union[str, Path], 
-  max_records:int = 0, wait:int = 1):
+    return rec
+
+def _to_recordings(raw_recordings:list) -> list[Recording]:
+  recordings = []
+  for rr in raw_recordings:
+    try:
+      recordings.append(Recording.from_dict(rr))
+    except KeyError:
+      pass
+
+  return recordings
+
+def _requests_adapter(url:str) -> dict:
+  return requests.get(url, verify = True).json()
+
+def get_recordings_list(genus:str, subspecies:str, api_adapter = _requests_adapter) -> list[Recording]:
+  # sanitize query (contains spaces)
+  query = quote(f'query=ssp:"{subspecies}" gen:"{genus}"', safe = '=:')
+  url = f"{XENO_CANTO_API_ENDPOINT}/recordings?{query}"
+
+  response = api_adapter(url)
+  
+  try:
+    raw_recordings = response['recordings']
+  except KeyError:
+    raw_recordings = []
+
+  return _to_recordings(raw_recordings)
+
+def _wget_adapter(url:str, output_path:Path) -> Path:
+  return Path(wget.download(url, str(output_path)))
+
+def download_recordings(recordings:list[Recording], output_dir:Union[str, Path], 
+  limit:int = 0, wait:int = 1, force:bool = False, download_adapter = _wget_adapter) -> Tuple[defaultdict[Path], int]:
 
   if wait < 1:
     raise ValueError(f"wait < 1 seconds not allowed : would overload {XENO_CANTO_NAME} API")
 
-  max_records = max_records if max_records > 0 else len(recordings_list)
-  for i, rec in enumerate(recordings_list[:max_records]):
-    try:
-      # url to download the audio file
-      url = rec['file']
-      # audio should be saved with format {genus}_{species}_{subspecies}_{id}.{ext}
-      file_name = get_recording_filename(rec)
-    except KeyError:
-      pass
-    else:
-      # do not download if file already exists
-      file_path = Path(output_dir) / file_name
-      if not file_path.is_file():
-        wget.download(url, str(file_path))
-        # sleep to avoid xeno-canto API overload
-        time.sleep(wait)
+  file_paths = defaultdict(Path)
+  nr_files_downloaded = 0
+  for rec in recordings[:(limit if limit > 0 else len(recordings))]:
+    file_path = Path(output_dir) / rec.filename
+    # do not download & wait if file already exists
+    if not file_path.is_file() or force:
+      file_path = download_adapter(rec.url, file_path)
+      nr_files_downloaded += 1
+
+      # sleep to avoid xeno-canto API overload
+      time.sleep(wait)
+
+    file_paths[rec.id] = file_path
+
+  return file_paths, nr_files_downloaded
