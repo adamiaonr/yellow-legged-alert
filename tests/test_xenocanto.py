@@ -81,46 +81,42 @@ class TestXenoCanto(unittest.TestCase):
     """
     test download_recordings() against correct input
     """
-    with open(self.data_root / "recordings_existent.json", 'r') as file:
-      raw_recordings = json.load(file)
-
     def _fake_adapter(url:str, path:Path):
       with open(path, 'w') as file:
         file.write('fake')
       return path
+
+    with open(self.data_root / "recordings_existent.json", 'r') as file:
+      raw_recordings = json.load(file)
     
     recordings = [Recording.from_dict(data) for data in raw_recordings['recordings']]
     
     # test download_recordings() with an empty output dir
-    paths, nr_downloads = download_recordings(recordings, self.data_root, download_adapter = _fake_adapter)
-    self.assertEqual(nr_downloads, 2)
-    self.assertEqual(len(paths), nr_downloads)
+    paths = download_recordings(recordings, self.data_root, download_adapter = _fake_adapter)
+    self.assertEqual(len(paths), 2)
     self.assertTrue(all(r.id in paths for r in recordings))
     self.assertTrue(all(paths[r.id] == self.data_root / r.filename for r in recordings))
 
     # test download_recordings() with an non-empty output dir
-    paths, nr_downloads = download_recordings(recordings, self.data_root, download_adapter = _fake_adapter)
-    self.assertEqual(nr_downloads, 0)
-    self.assertEqual(len(paths), 2)
+    paths = download_recordings(recordings, self.data_root, download_adapter = _fake_adapter)
+    self.assertEqual(len(paths), 0)
 
     # test download_recordings() with an non-empty output dir but force = True
-    paths, nr_downloads = download_recordings(recordings, self.data_root, force = True, 
+    paths = download_recordings(recordings, self.data_root, force = True, 
       download_adapter = _fake_adapter)
-    self.assertEqual(nr_downloads, 2)
-    self.assertEqual(len(paths), nr_downloads)
+    self.assertEqual(len(paths), 2)
 
     # test download_recordings() with a limit in downloads
-    paths, nr_downloads = download_recordings(recordings, self.data_root, limit = 1, force = True, 
+    paths = download_recordings(recordings, self.data_root, limit = 1, force = True, 
       download_adapter = _fake_adapter)
-    self.assertEqual(nr_downloads, 1)
-    self.assertEqual(len(paths), nr_downloads)
+    self.assertEqual(len(paths), 1)
 
   def test_download_recordings_wrong_wait(self):
     """
     test download_recordings() against incorrect wait time arguments
     """
     with self.assertRaises(ValueError):
-      _, _ = download_recordings([], Path("data/xenocanto"), wait = 0)
+      _ = download_recordings([], Path("data/xenocanto"), wait = 0)
 
 if __name__ == '__main__':
   unittest.main()

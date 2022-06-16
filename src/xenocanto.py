@@ -80,23 +80,19 @@ def _wget_adapter(url:str, output_path:Path) -> Path:
   return Path(wget.download(url, str(output_path)))
 
 def download_recordings(recordings:list[Recording], output_dir:Union[str, Path], 
-  limit:int = 0, wait:int = 1, force:bool = False, download_adapter = _wget_adapter) -> Tuple[defaultdict[Path], int]:
+  limit:int = 0, wait:int = 1, force:bool = False, download_adapter = _wget_adapter) -> defaultdict[Path]:
 
   if wait < 1:
     raise ValueError(f"wait < 1 seconds not allowed : would overload {XENO_CANTO_NAME} API")
 
   file_paths = defaultdict(Path)
-  nr_files_downloaded = 0
   for rec in recordings[:(limit if limit > 0 else len(recordings))]:
     file_path = Path(output_dir) / rec.filename
     # do not download & wait if file already exists
     if not file_path.is_file() or force:
       file_path = download_adapter(rec.url, file_path)
-      nr_files_downloaded += 1
-
+      file_paths[rec.id] = file_path
       # sleep to avoid xeno-canto API overload
       time.sleep(wait)
 
-    file_paths[rec.id] = file_path
-
-  return file_paths, nr_files_downloaded
+  return file_paths
