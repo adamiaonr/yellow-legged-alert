@@ -1,55 +1,43 @@
+import numpy as np
 import librosa as lr
 import soundfile as sf
 import noisereduce as nr
 
 from pathlib import Path
 
-def _get_file_path(input_file_path:Path, suffix:str, output_dir:Path = None, format = 'WAV') -> Path:
-    # file name format : add '{suffix}' to the 'name' of input_filepath
-    file_name = f"{input_file_path.stem}_{suffix}.{format}".lower()
+def save_waveform(waveform:np.ndarray, sample_rate:int, file_path:Path, format:str = 'WAV', force:bool = False):
+  if (not file_path.is_file()) or force:
+    sf.write(file_path, waveform, sample_rate, format = format)
 
-    # if no output dir is specified, save file in same directory
-    if output_dir:
-      output_file_path = output_dir / file_name
-    else:
-      output_file_path = input_file_path.with_stem(file_name)
+def get_reduced_background_noise(file_path:Path) -> tuple[np.ndarray, int]:
+  waveform, sample_rate = lr.load(file_path, sr = None)
+  # apply non-stationary noise reduction to audio file (https://pypi.org/project/noisereduce/)
+  waveform_reduced = nr.reduce_noise(y = waveform, sr = sample_rate)
 
-    return output_file_path
+  return waveform_reduced, sample_rate
 
-def split_into_non_silent(input_file_path:Path, output_dir:Path = None, 
-  threshold:list = [.5, 1.], format = 'WAV', force = False) -> Path:
+def get_clips(file_path:Path, time:int = 1, trim:bool = False) -> tuple[list[np.ndarray], int]:
+  waveform, sample_rate = lr.load(path = file_path, sr = None)
+  # if trim is True, trim silence from start and end of waveform
+  if trim: 
+    waveform, _ = lr.effects.trim(waveform)
+  
+  duration = lr.get_duration(y = waveform, sr = sample_rate)
+  m = time * sample_rate
+  waveforms = [waveform[i * m : ((i + 1) * m)] for i in range(int(duration / time) + 1)]
 
-  # load audio file and split into non-silent intervals
-  waveform, sample_rate = lr.load(path = input_file_path)
+  return waveforms, sample_rate
+
+def get_non_silent_clips(file_path:Path, duration_limits:list = [.5, 1.]) -> tuple[list[np.ndarray], int]:
+  waveform, sample_rate = lr.load(path = file_path, sr = None)
   intervals = lr.effects.split(y = waveform)
 
-  output_file_paths = []
-  for i, intr in enumerate(intervals):
-    # skip intervals w/ duration outside of threshold[] limits
-    duration = lr.get_duration(y = waveform[intr[0]:intr[1]], sr = sample_rate)
-    if duration < threshold[0] or duration > threshold[1]:
+  waveforms = []
+  for interval in intervals:
+    # skip intervals w/ duration outside of duration_limits[]
+    duration = lr.get_duration(y = waveform[interval[0]:interval[1]], sr = sample_rate)
+    if duration < duration_limits[0] or duration > duration_limits[1]:
       continue
+    waveforms.append(waveform[interval[0]:interval[1]])
 
-    output_file_path = _get_file_path(input_file_path, f'{i}', output_dir, format)
-    output_file_paths.append(output_file_path)
-
-    if (not output_file_path.is_file()) or force:
-      sf.write(output_file_path, waveform[intr[0]:intr[1]], sample_rate, format = format)
-
-  return output_file_paths
-
-def reduce_background_noise(input_file_path:Path, output_dir:Path = None, 
-  suffix:str = 'noisered', format = 'WAV', force = False) -> Path:
-  
-  # output file name format : add '_noisered' suffix to input_filename
-  output_file_path = _get_file_path(input_file_path, suffix, output_dir, format)
-  
-  # skip noise removal if file already exists or if force = False
-  if (not output_file_path.is_file()) or force:
-    # apply non-stationary noise reduction to audio file (https://pypi.org/project/noisereduce/)
-    waveform, sample_rate = lr.load(input_file_path)
-    waveform_reduced = nr.reduce_noise(y = waveform, sr = sample_rate)
-
-    sf.write(output_file_path, waveform_reduced, sample_rate, format = format)
-  
-  return output_file_path
+  return waveforms, sample_rate
