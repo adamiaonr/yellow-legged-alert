@@ -6,7 +6,7 @@ import noisereduce as nr
 from pathlib import Path
 
 def open_waveform(file_path:Path) -> tuple[np.ndarray, int]:
-  waveform, sample_rate = lr.load(path = file_path, sr = None)  
+  waveform, sample_rate = lr.load(path = file_path, sr = None)
   return waveform, sample_rate
 
 def save_waveform(waveform:np.ndarray, sample_rate:int, file_path:Path, format:str = 'WAV', force:bool = False):
@@ -33,7 +33,7 @@ def split_audio_on_time(waveform:np.ndarray, sample_rate:int,
   # (optional) trim silence segments from start and end of waveform
   if trim: 
     waveform, _ = lr.effects.trim(waveform, frame_length = 256, hop_length = 64)
-  segment_size = duration * sample_rate
+  segment_size = int(duration * sample_rate)
   waveforms = [ waveform[i:(i + segment_size)] for i in range(0, len(waveform), segment_size) ]
 
   return waveforms, sample_rate
