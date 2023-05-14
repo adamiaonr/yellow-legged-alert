@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "yellow-legged-alert"
+version = "0.1.0"
+description = "project to collect and detect sounds of seagulls in my terrace"
+authors = ["Antonio Rodrigues <adamiaonr@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "yellow_legged_alert"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
